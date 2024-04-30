@@ -1,5 +1,5 @@
 ---
-name: Feature request
+name: Feature request o²S²PARC
 about: Suggest an idea for o²S²PARC
 title: ''
 labels: Feedback, type:enhancement

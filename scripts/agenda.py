@@ -25,9 +25,9 @@ logger = logging.getLogger("agenda")
 logging.basicConfig(level=logging.INFO)
 
 
-COLUMNS = "PO Topic Title Presenter Status Duration Start-Time".split()
+COLUMNS = "Topic Title Presenter Status Duration Start-Time".split()
 
-TEAM_ACRONYMS_MAP = {
+INITIALS_TO_USERNAMES = {
     "ALL": "Surfict",
     "ANE": "GitHK",
     "BL": "dyollb",
@@ -36,35 +36,23 @@ TEAM_ACRONYMS_MAP = {
     "EI": "elisabettai",
     "IP": "ignapas",
     "MaG": "mguidon",
-    "MB" : "bisgaard-itis",
+    "MB": "bisgaard-itis",
+    "MD": "matusdrobuliak66",
     "Nik": "drniiken",
     "OM": "odeimaiz",
     "PC": "pcrespov",
     "SAN": "sanderegg",
+    "SB": "sbenkler",
+    "SC": "SCA-ZMT",
+    "TN": "newton1985",
+    "YH": "YuryHrytsuk",
 }
+
+USERNAMES_TO_INITIALS = {value: key for key, value in INITIALS_TO_USERNAMES.items()}
 
 
 def to_md_row(row: list[str]):
     return "|" + "|".join(row) + "|"
-
-
-def search_in_mapping_db(issue_title):
-    # NOTE: below file contains issue names and item numbers,
-    # separated by `#`, example:
-    # `Portal work#545` will generate the following:
-    # - description=`Portal work`
-    # - issue=`545`
-
-    file_content = Path("mapping_db.ignore.txt").read_text()
-    lines = file_content.strip().split("\n")
-
-    def _extract(line):
-        description, issue = line.split("#")
-        return description, issue
-
-    mapping = dict({_extract(l) for l in lines})
-
-    return mapping[issue_title]
 
 
 def format_status(status):
@@ -75,11 +63,11 @@ def format_status(status):
     return status
 
 
-def to_md(csv_path: Path):
+def create_markdown_file(csv_path: Path) -> Path:
     md_path = csv_path.with_suffix(".md")
 
     with csv_path.open() as csvfile:
-        reader = csv.DictReader(csvfile)
+        reader = csv.DictReader(csvfile, delimiter="	")
 
         with md_path.open("wt") as md:
             print(to_md_row(COLUMNS), file=md)
@@ -90,8 +78,7 @@ def to_md(csv_path: Path):
             issue_numbers = []
             for row in reader:
                 # group
-                # issue = search_in_mapping_db(row["Title"])
-                issue = row['Issue']
+                issue = row["Issue"].split("/")[-1]
                 issue_numbers.append(issue)
                 title = f"[#{issue}] {row['Title']}"
                 topic = row["Topic"]
@@ -100,32 +87,37 @@ def to_md(csv_path: Path):
                     indented = True
                     title = f"<blockquote>{title}</blockquote>"
                 current_topic = topic
-
+                assignees = [
+                    f"[{USERNAMES_TO_INITIALS[u]}]"
+                    for u in re.findall(r"(\b\w+\b)", row["Assignees"])
+                    if u in USERNAMES_TO_INITIALS
+                ]
                 # write
                 col_topic = "" if (indented or topic == "undefined") else topic
                 print(
                     to_md_row(
                         [
-                            row["PO Priority"],
-                            col_topic,
-                            title,
-                            "",  # do not add presenters
-                            format_status(row["Status"]),
-                            "",
-                            "",
+                            col_topic,  # topic
+                            title,  # title
+                            ", ".join(assignees),  # presenters
+                            format_status(row["Status"]),  # Status
+                            "",  # Duration
+                            "",  #
                         ]
                     ),
                     file=md,
                 )
+
+            print("", file=md)
             for issue in issue_numbers:
                 md.writelines(
                     f"[#{issue}]: https://github.com/ITISFoundation/osparc-issues/issues/{issue}\n"
                 )
 
             print("", file=md)
-            for acronym in sorted(TEAM_ACRONYMS_MAP.keys()):
-                username = TEAM_ACRONYMS_MAP[acronym]
-                print(f"[{acronym}]:https://github.com/{username}", kwargs)
+            for acronym in sorted(INITIALS_TO_USERNAMES.keys()):
+                username = INITIALS_TO_USERNAMES[acronym]
+                print(f"[{acronym}]:https://github.com/{username}", file=md)
 
     return md_path
 
@@ -133,7 +125,7 @@ def to_md(csv_path: Path):
 def create_md_from_csv():
     for csv_path in Path.cwd().glob("*.csv"):
         logger.info("Processing %s ...", csv_path)
-        md_path = to_md(csv_path)
+        md_path = create_markdown_file(csv_path)
         logger.info("Created %s", md_path)
 
 
